@@ -11,6 +11,7 @@ public interface IWatchface {
     // Implemented by the Watchface
     public void onActiveStateChanged(boolean active);
     public void onTimeChanged(Calendar time);
+    public boolean handleSecondsInDimMode(); // returning true may have adverse effect on battery life
 
     // Watchface should delegate these calls to the watch
     public void onAttachedToWindow();

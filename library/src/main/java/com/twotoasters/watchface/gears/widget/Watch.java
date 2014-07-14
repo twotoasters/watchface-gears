@@ -1,5 +1,7 @@
 package com.twotoasters.watchface.gears.widget;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -21,6 +23,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public class Watch {
+
+    private static final String ACTION_KEEP_WATCHFACE_AWAKE = "intent.action.keep.watchface.awake";
 
     /**
      * The default formatting pattern in 12-hour mode. This pattern is used
@@ -64,6 +68,8 @@ public class Watch {
     private Calendar mTime;
     private String mTimeZone;
 
+    private AlarmManager alarmManager;
+
     private final ContentObserver mFormatChangeObserver = new ContentObserver(new Handler()) {
         @Override
         public void onChange(boolean selfChange) {
@@ -85,7 +91,10 @@ public class Watch {
                 final String timeZone = intent.getStringExtra("time-zone");
                 createTime(timeZone);
             }
-            onTimeChanged();
+
+            if (!ACTION_KEEP_WATCHFACE_AWAKE.equals(intent.getAction())) {
+                onTimeChanged();
+            }
         }
     };
 
@@ -123,6 +132,8 @@ public class Watch {
                 mFormat24 = DEFAULT_FORMAT_24_HOUR;
             }
         }
+
+        alarmManager = (AlarmManager) watchface.getContext().getSystemService(Context.ALARM_SERVICE);
 
         createTime(mTimeZone);
         // Wait until onAttachedToWindow() to handle the ticker
@@ -357,6 +368,10 @@ public class Watch {
 
             createTime(mTimeZone);
 
+            if (hasWatchface() && getWatchface().handleSecondsInDimMode()) {
+                alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 1000, 1000, getPendingIntent());
+            }
+
             if (mHasSeconds) {
                 mTicker.run();
             } else {
@@ -370,11 +385,20 @@ public class Watch {
             unregisterReceiver();
             unregisterObserver();
 
-            if (hasWatchface())
+            if (hasWatchface()) {
                 getWatchface().getHandler().removeCallbacks(mTicker);
+
+                if (getWatchface().handleSecondsInDimMode()) {
+                    alarmManager.cancel(getPendingIntent());
+                }
+            }
 
             mAttached = false;
         }
+    }
+
+    private PendingIntent getPendingIntent() {
+        return hasWatchface() ? PendingIntent.getBroadcast(getWatchface().getContext(), 0, new Intent(ACTION_KEEP_WATCHFACE_AWAKE), 0) : null;
     }
 
     private void registerReceiver() {
@@ -383,6 +407,7 @@ public class Watch {
         filter.addAction(Intent.ACTION_TIME_TICK);
         filter.addAction(Intent.ACTION_TIME_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+        filter.addAction(ACTION_KEEP_WATCHFACE_AWAKE);
 
         if (hasWatchface())
             getWatchface().getContext().registerReceiver(mIntentReceiver, filter, null, getWatchface().getHandler());
